@@ -1,13 +1,13 @@
 """
 SCHOOL RAG CHATBOT - WEBSITE VERSION (Groq LLM + Gemini Embedding)
 
-Run panna:
+To run:
     1. pip install -r requirements.txt --break-system-packages
     2. pip install llama-index-llms-groq --break-system-packages
-    3. export GOOGLE_API_KEY="unga-gemini-key"
-    4. export GROQ_API_KEY="unga-groq-key"
+    3. export GOOGLE_API_KEY="your-gemini-key"
+    4. export GROQ_API_KEY="your-groq-key"
     5. python3 app.py
-    6. Browser-la: http://localhost:8000 thirakkalam
+    6. Open in browser: http://localhost:8000
 """
 
 import os
@@ -33,20 +33,20 @@ STORAGE_DIR = "./storage"
 GROUP_SIZE = 20
 
 # ---------------------------------------------------------------
-# STEP 1: LLM = Groq, Embedding = Gemini
+# STEP 1: Set up LLM = Groq, Embedding model = Gemini
 # ---------------------------------------------------------------
 gemini_api_key = os.environ.get("GOOGLE_API_KEY")
 if not gemini_api_key:
     raise ValueError(
-        "GOOGLE_API_KEY set pannala! Terminal-la idha type pannunga:\n"
-        'export GOOGLE_API_KEY="unga-key-inga"'
+        "GOOGLE_API_KEY is not set! Run this in your terminal:\n"
+        'export GOOGLE_API_KEY="your-key-here"'
     )
 
 groq_api_key = os.environ.get("GROQ_API_KEY")
 if not groq_api_key:
     raise ValueError(
-        "GROQ_API_KEY set pannala! Terminal-la idha type pannunga:\n"
-        'export GROQ_API_KEY="unga-key-inga"'
+        "GROQ_API_KEY is not set! Run this in your terminal:\n"
+        'export GROQ_API_KEY="your-key-here"'
     )
 
 Settings.llm = Groq(
@@ -68,7 +68,7 @@ Settings.llm = Groq(
 Settings.embed_model = GoogleGenAIEmbedding(model_name="gemini-embedding-001", api_key=gemini_api_key)
 
 # ---------------------------------------------------------------
-# STEP 2: Firebase connect pannunga
+# STEP 2: Connect to Firebase
 # ---------------------------------------------------------------
 print("Connecting to Firebase...")
 cred = credentials.Certificate("serviceAccountKey.json")
@@ -77,6 +77,7 @@ db = firestore.client()
 
 
 def fetch_students_from_firebase():
+    """Fetch all student records from Firestore and group them into chunks."""
     students_ref = db.collection("students").stream()
     student_texts = []
 
@@ -94,6 +95,8 @@ def fetch_students_from_firebase():
         )
         student_texts.append(text)
 
+    # Group every 20 students into one document, to reduce the number
+    # of embedding API calls (avoids hitting rate limits)
     documents = []
     for i in range(0, len(student_texts), GROUP_SIZE):
         chunk = student_texts[i : i + GROUP_SIZE]
@@ -104,32 +107,33 @@ def fetch_students_from_firebase():
 
 
 # ---------------------------------------------------------------
-# STEP 3: Index build / load pannunga
+# STEP 3: Build or load the vector index
+# (built once on first run, then loaded from disk afterwards)
 # ---------------------------------------------------------------
 if os.path.exists(STORAGE_DIR):
-    print("Saved index irukku -- load panren (fast)...")
+    print("Saved index found -- loading it (fast)...")
     storage_context = StorageContext.from_defaults(persist_dir=STORAGE_DIR)
     index = load_index_from_storage(storage_context)
 else:
     print("Fetching students from Firebase...")
     documents, total_students = fetch_students_from_firebase()
-    print(f"Fetched {total_students} students, {len(documents)} groups-a serthen")
+    print(f"Fetched {total_students} students, grouped into {len(documents)} chunks")
 
     print("Building search index...")
     index = VectorStoreIndex.from_documents(documents, show_progress=True)
 
-    print("Index-a save panren...")
+    print("Saving index to disk...")
     index.storage_context.persist(persist_dir=STORAGE_DIR)
 
 query_engine = index.as_query_engine(
     similarity_top_k=4,
     response_mode="tree_summarize",
 )
-print("Ready! Server start aagudhu...")
+print("Ready! Starting server...")
 
 
 # ---------------------------------------------------------------
-# STEP 4: FastAPI app - /chat API + frontend serve pannunga
+# STEP 4: FastAPI app - /chat API + frontend serving
 # ---------------------------------------------------------------
 app = FastAPI(title="School RAG Chatbot")
 
@@ -140,10 +144,11 @@ class ChatRequest(BaseModel):
 
 
 # ---------------------------------------------------------------
-# CHAT HISTORY - stored in Firestore "chat_sessions" collection
+# CHAT HISTORY - stored in the Firestore "chat_sessions" collection
 # ---------------------------------------------------------------
 @app.post("/sessions")
 def create_session():
+    """Create a new chat session, shown as a new entry in the sidebar."""
     doc_ref = db.collection("chat_sessions").document()
     doc_ref.set({
         "title": "New chat",
@@ -155,6 +160,7 @@ def create_session():
 
 @app.get("/sessions")
 def list_sessions():
+    """List all past chat sessions for the sidebar, latest first."""
     docs = db.collection("chat_sessions").order_by(
         "created_at", direction=firestore.Query.DESCENDING
     ).stream()
@@ -170,10 +176,28 @@ def list_sessions():
 
 @app.get("/sessions/{session_id}")
 def get_session(session_id: str):
+    """Return the full message history for one specific chat session."""
     doc = db.collection("chat_sessions").document(session_id).get()
     if not doc.exists:
         return {"messages": []}
     return {"messages": doc.to_dict().get("messages", [])}
+
+
+def _save_to_history(session_id, question, answer):
+    """Save a question + answer pair into the session's message history."""
+    doc_ref = db.collection("chat_sessions").document(session_id)
+    doc = doc_ref.get()
+    existing = doc.to_dict() if doc.exists else {"messages": [], "title": "New chat"}
+    messages = existing.get("messages", [])
+    messages.append({"role": "user", "text": question})
+    messages.append({"role": "bot", "text": answer})
+
+    update_data = {"messages": messages}
+    # Use the first question as the session title (shown in the sidebar)
+    if existing.get("title", "New chat") == "New chat" and len(messages) <= 2:
+        update_data["title"] = question[:40] + ("..." if len(question) > 40 else "")
+
+    doc_ref.set(update_data, merge=True)
 
 
 @app.post("/chat")
@@ -181,6 +205,47 @@ def chat(req: ChatRequest):
     question = req.question.strip()
     if not question:
         return {"answer": "Please type a question."}
+
+    question_lower = question.lower()
+
+    # ---------------------------------------------------------------
+    # For counting questions ("how many students", "total students"),
+    # we do NOT use RAG / semantic search. RAG only looks at the top
+    # few similar chunks, so it cannot give an accurate total count.
+    # Instead, we query Firestore directly for the exact, correct count.
+    # ---------------------------------------------------------------
+    if ("how many" in question_lower or "total" in question_lower) and "student" in question_lower:
+        try:
+            all_docs = list(db.collection("students").stream())
+            total_count = len(all_docs)
+
+            class_filter = None
+            for grade in ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th",
+                          "9th", "10th", "11th", "12th"]:
+                if grade in question_lower:
+                    class_filter = grade
+                    break
+
+            if class_filter:
+                matching = [
+                    d for d in all_docs
+                    if str(d.to_dict().get("class", "")).lower().startswith(class_filter[:-2])
+                ]
+                answer = f"There are {len(matching)} students in {class_filter} standard."
+            else:
+                answer = f"There are {total_count} students in total in the school."
+
+        except Exception as e:
+            answer = f"Something went wrong: {e}"
+
+        if req.session_id:
+            _save_to_history(req.session_id, question, answer)
+        return {"answer": answer}
+
+    # ---------------------------------------------------------------
+    # For all other questions (names, marks, percentage, attendance),
+    # use the RAG query engine as usual
+    # ---------------------------------------------------------------
     try:
         response = query_engine.query(question)
         answer = str(response)
@@ -188,18 +253,7 @@ def chat(req: ChatRequest):
         answer = f"Something went wrong: {e}"
 
     if req.session_id:
-        doc_ref = db.collection("chat_sessions").document(req.session_id)
-        doc = doc_ref.get()
-        existing = doc.to_dict() if doc.exists else {"messages": [], "title": "New chat"}
-        messages = existing.get("messages", [])
-        messages.append({"role": "user", "text": question})
-        messages.append({"role": "bot", "text": answer})
-
-        update_data = {"messages": messages}
-        if existing.get("title", "New chat") == "New chat" and len(messages) <= 2:
-            update_data["title"] = question[:40] + ("..." if len(question) > 40 else "")
-
-        doc_ref.set(update_data, merge=True)
+        _save_to_history(req.session_id, question, answer)
 
     return {"answer": answer}
 

@@ -14,8 +14,9 @@ HOW TO RUN:
     python3 gradio_ui.py
 """
 
+import os
 import gradio as gr
-from app import get_answer  
+from app import get_answer
 
 # ---------------------------------------------------------------
 # CHAT HISTORY (in-memory store)
@@ -55,7 +56,7 @@ def respond(message, history):
     short_q = message[:40] + "..." if len(message) > 40 else message
     chat_sessions.append(short_q)
 
-    # Add to chat (Gradio 6.0 messages format)
+    # Add to chat
     history.append({"role": "user", "content": message})
     history.append({"role": "assistant", "content": answer})
 
@@ -124,7 +125,7 @@ with gr.Blocks(title="EduMind AI") as demo:
     # FOOTER
     gr.Markdown("""
     ---
-    **EduMind AI** | Firebase 🔥 | LlamaIndex 🦙 | Groq ⚡ | Gradio 🎨
+    **EduMind AI** | Firebase 🔥 | LlamaIndex 🦙 | Gemini ✨ | Gradio 🎨
     """)
 
     # EVENT HANDLERS
@@ -146,12 +147,13 @@ with gr.Blocks(title="EduMind AI") as demo:
     )
 
 # ---------------------------------------------------------------
-# LAUNCH
+# LAUNCH — Render PORT environment variable use pannudu
 # ---------------------------------------------------------------
 if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 7860))
     demo.launch(
         server_name="0.0.0.0",
-        server_port=7860,
+        server_port=port,
         share=False,
         show_error=True,
     )

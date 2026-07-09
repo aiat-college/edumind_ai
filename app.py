@@ -1,11 +1,12 @@
 """
 EDUMIND AI — BACKEND (app.py)
-Firebase + LlamaIndex + Groq
+Firebase + LlamaIndex + Groq + Gemini Embedding
 
 This file handles:
 1. Firebase connection — fetch student data
 2. LlamaIndex — build/load search index
-3. Groq LLM — generate answers
+3. Groq LLM — generate answers (14400 requests/day FREE)
+4. System prompt — LLM behavior instructions
 
 This is BACKEND only — no UI here.
 gradio_ui.py imports this file for the frontend.
@@ -21,7 +22,7 @@ from llama_index.core import (
     StorageContext,
     load_index_from_storage,
 )
-from llama_index.llms.google_genai import GoogleGenAI
+from llama_index.llms.groq import Groq
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
 
 # ---------------------------------------------------------------
@@ -42,19 +43,39 @@ if not groq_api_key:
     raise ValueError("GROQ_API_KEY is not set! Run: export GROQ_API_KEY='your-key'")
 
 # ---------------------------------------------------------------
-# STEP 2: Configure LLM + Embedding
+# STEP 2: System Prompt — LLM behaviour instructions
 # ---------------------------------------------------------------
-# Groq — answer generate panna (14400 requests/day free)
-Settings.llm = GoogleGenAI(model="gemini-2.5-flash-lite", api_key=google_api_key)
+SYSTEM_PROMPT = """You are EduMind AI, an intelligent school data assistant.
+You ONLY answer questions based on the student data provided in the context.
 
-# Gemini — text to vectors (embedding only, used once)
+Rules you must follow:
+1. Only use information from the provided student data context
+2. If asked for a list of students, format it as a clear numbered list
+3. If the information is not available in the data, say exactly:
+   "This information is not available in the database."
+4. Never guess, assume, or make up any student information
+5. Always be helpful, clear, and professional
+6. When giving student details, include: Name, Roll No, Class, Section, Marks, Percentage
+7. If asked about a specific student, give all available details about them"""
+
+# ---------------------------------------------------------------
+# STEP 3: Configure LLM + Embedding
+# ---------------------------------------------------------------
+# Groq — fast, free (14400 requests/day), answer generate panna
+Settings.llm = Groq(
+    model="llama-3.1-8b-instant",
+    api_key=groq_api_key,
+    system_prompt=SYSTEM_PROMPT,
+)
+
+# Gemini Embedding — text to vectors (used only once when building index)
 Settings.embed_model = GoogleGenAIEmbedding(
     model_name="gemini-embedding-001",
     api_key=google_api_key
 )
 
 # ---------------------------------------------------------------
-# STEP 3: Firebase Connection
+# STEP 4: Firebase Connection
 # ---------------------------------------------------------------
 print("[Backend] Connecting to Firebase...")
 cred = credentials.Certificate("serviceAccountKey.json")
@@ -63,7 +84,7 @@ db = firestore.client()
 print("[Backend] Firebase connected!")
 
 # ---------------------------------------------------------------
-# STEP 4: Fetch Students from Firestore
+# STEP 5: Fetch Students from Firestore
 # ---------------------------------------------------------------
 def fetch_students_from_firebase():
     """
@@ -95,7 +116,7 @@ def fetch_students_from_firebase():
     return documents, len(student_texts)
 
 # ---------------------------------------------------------------
-# STEP 5: Build or Load LlamaIndex
+# STEP 6: Build or Load LlamaIndex
 # ---------------------------------------------------------------
 if os.path.exists(STORAGE_DIR):
     print("[Backend] Loading saved index...")
@@ -111,17 +132,18 @@ else:
     index.storage_context.persist(persist_dir=STORAGE_DIR)
     print("[Backend] Index saved!")
 
-query_engine = index.as_query_engine(similarity_top_k=10)
+query_engine = index.as_query_engine(similarity_top_k=3)
 print("[Backend] Ready to answer questions!")
 
 # ---------------------------------------------------------------
-# STEP 6: Get Answer Function (called by frontend)
+# STEP 7: Get Answer Function (called by frontend)
 # ---------------------------------------------------------------
 def get_answer(question: str) -> str:
     """
     Takes a question string.
     Returns an answer string.
     This function is called by gradio_ui.py (frontend).
+    System prompt is automatically applied by LlamaIndex via Settings.llm.
     """
     if not question.strip():
         return "Please type a question!"
@@ -134,4 +156,3 @@ def get_answer(question: str) -> str:
         if "429" in error_msg or "rate_limit" in error_msg.lower():
             return "Rate limit reached. Please wait a moment and try again."
         return f"Error: {error_msg}"
- 

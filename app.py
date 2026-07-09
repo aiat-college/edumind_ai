@@ -21,7 +21,7 @@ from llama_index.core import (
     StorageContext,
     load_index_from_storage,
 )
-from llama_index.llms.groq import Groq
+from llama_index.llms.google_genai import GoogleGenAI
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
 
 # ---------------------------------------------------------------
@@ -45,7 +45,7 @@ if not groq_api_key:
 # STEP 2: Configure LLM + Embedding
 # ---------------------------------------------------------------
 # Groq — answer generate panna (14400 requests/day free)
-Settings.llm = Groq(model="llama-3.3-70b-versatile", api_key=groq_api_key)
+Settings.llm = GoogleGenAI(model="gemini-2.5-flash-lite", api_key=google_api_key)
 
 # Gemini — text to vectors (embedding only, used once)
 Settings.embed_model = GoogleGenAIEmbedding(
@@ -134,3 +134,4 @@ def get_answer(question: str) -> str:
         if "429" in error_msg or "rate_limit" in error_msg.lower():
             return "Rate limit reached. Please wait a moment and try again."
         return f"Error: {error_msg}"
+ 

@@ -15,7 +15,7 @@ HOW TO RUN:
 """
 
 import gradio as gr
-from app import get_answer  # Backend-irundhu function import pannudu
+from app import get_answer  
 
 # ---------------------------------------------------------------
 # CHAT HISTORY (in-memory store)

@@ -1,7 +1,5 @@
-fastapi
-uvicorn[standard]
-pydantic
-firebase-admin
+gradio
 llama-index
 llama-index-llms-google-genai
 llama-index-embeddings-google-genai
+firebase-admin

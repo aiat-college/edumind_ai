@@ -1,4 +1,4 @@
-gradio
+gradio==4.44.1
 llama-index
 llama-index-llms-groq
 llama-index-llms-google-genai

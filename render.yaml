@@ -1,7 +1,0 @@
-services:
-  - type: web
-    name: edumind-ai
-    runtime: python
-    pythonVersion: "3.11.9"
-    buildCommand: pip install -r requirements.txt
-    startCommand: python gradio_ui.py

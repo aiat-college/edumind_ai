@@ -1,7 +1,11 @@
-gradio==5.9.1
+gradio==5.38.2
+gradio_client==1.11.0
+
 pandas==2.2.3
+
 llama-index-core==0.14.23
 llama-index-llms-groq
 llama-index-embeddings-google-genai
 llama-index-llms-google-genai
+
 firebase-admin==6.5.0

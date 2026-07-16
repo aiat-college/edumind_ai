@@ -216,3 +216,25 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# ===========================================
+# EduMind AI
+# ===========================================
+
+# Firebase Secret Key
+serviceAccountKey.json
+
+# Virtual Environment
+venv/
+.venv/
+
+# Gradio Cache
+.gradio/
+
+# Environment Variables
+.env
+
+# Python Cache
+__pycache__/
+*.pyc

@@ -1,11 +1,15 @@
 gradio==5.38.2
-gradio_client==1.11.0
-
-pandas==2.2.3
-
-llama-index-core==0.14.23
-llama-index-llms-groq
-llama-index-embeddings-google-genai
-llama-index-llms-google-genai
 
 firebase-admin==6.5.0
+
+llama-index==0.14.1
+llama-index-core==0.14.1
+llama-index-llms-groq==0.4.0
+llama-index-embeddings-huggingface==0.6.1
+
+sentence-transformers==5.0.0
+transformers==4.53.2
+huggingface-hub==0.33.4
+torch>=2.2.0
+
+python-dotenv==1.0.1

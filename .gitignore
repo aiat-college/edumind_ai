@@ -8,8 +8,7 @@ __pycache__/
 # Firebase credentials
 serviceAccountKey.json
 
-# LlamaIndex storage
-storage/
+
 
 # Gradio temporary files
 .gradio/

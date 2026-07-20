@@ -3,18 +3,13 @@ import os
 from llama_index.core import (
     Settings,
     StorageContext,
-    VectorStoreIndex,
     load_index_from_storage,
-    Document,
 )
 
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.groq import Groq
 
-from firestore_utils import db
-
 STORAGE_DIR = "./storage"
-
 
 SYSTEM_PROMPT = """
 You are EduMind AI.
@@ -29,43 +24,6 @@ Rules:
 "This information is not available in the database."
 4. Keep answers short and professional.
 """
-
-
-def build_index():
-
-    print("Loading students from Firestore...")
-
-    documents = []
-
-    docs = db.collection("students").stream()
-
-    for doc in docs:
-
-        student = doc.to_dict()
-
-        text = f"""
-Name: {student.get('name','')}
-Roll Number: {student.get('roll_no','')}
-Class: {student.get('class','')}
-Section: {student.get('section','')}
-Group: {student.get('group','')}
-Marks: {student.get('marks_total','')}
-Maximum Marks: {student.get('max_marks','')}
-Percentage: {student.get('percentage','')}
-Attendance: {student.get('attendance_percent','')}
-"""
-
-        documents.append(Document(text=text))
-
-    print(f"Loaded {len(documents)} students.")
-
-    index = VectorStoreIndex.from_documents(documents)
-
-    index.storage_context.persist(STORAGE_DIR)
-
-    print("Index created successfully.")
-
-    return index
 
 
 def load_rag_engine():
@@ -85,21 +43,19 @@ def load_rag_engine():
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
-    if os.path.exists(STORAGE_DIR):
-
-        print("Loading existing index...")
-
-        storage_context = StorageContext.from_defaults(
-            persist_dir=STORAGE_DIR
+    if not os.path.exists(STORAGE_DIR):
+        raise FileNotFoundError(
+            "Storage folder not found. Please upload the storage folder."
         )
 
-        index = load_index_from_storage(storage_context)
+    print("Loading existing index...")
 
-    else:
+    storage_context = StorageContext.from_defaults(
+        persist_dir=STORAGE_DIR
+    )
 
-        print("Storage folder not found.")
-        print("Building index...")
+    index = load_index_from_storage(storage_context)
 
-        index = build_index()
+    print("Index loaded successfully.")
 
-    return index.as_query_engine(similarity_top_k=10)
+    return index.as_query_engine(similarity_top_k=3)
